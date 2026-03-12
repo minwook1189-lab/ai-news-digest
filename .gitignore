@@ -1,0 +1,12 @@
+# 환경 변수 (API 키, 비밀번호 포함 - 절대 업로드 금지)
+.env
+
+# 로그
+logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
