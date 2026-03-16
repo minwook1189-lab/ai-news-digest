@@ -1,123 +1,308 @@
 import feedparser
 import win32com.client
-from google import genai
-from datetime import datetime
+from groq import Groq
+from datetime import datetime, timezone, timedelta
+import calendar
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-GEMINI_API_KEY  = os.getenv('GEMINI_API_KEY')
+GROQ_API_KEY    = os.getenv('GROQ_API_KEY')
 SMTP_EMAIL      = os.getenv('SMTP_EMAIL')
 SMTP_PASSWORD   = os.getenv('SMTP_PASSWORD')
-RECIPIENT_EMAIL = os.getenv('RECIPIENT_EMAIL')
+
+# 수신자: 쉼표 또는 세미콜론으로 여러 명 지정 가능 (예: "a@mail.com, b@mail.com")
+_raw_recipients = os.getenv('RECIPIENT_EMAIL', '')
+RECIPIENT_TO = '; '.join(
+    r.strip() for r in _raw_recipients.replace(',', ';').split(';') if r.strip()
+)
 
 RSS_FEEDS = [
-    ('TechCrunch AI',        'https://techcrunch.com/category/artificial-intelligence/feed/'),
-    ('VentureBeat AI',       'https://venturebeat.com/category/ai/feed/'),
-    ('MIT Technology Review','https://www.technologyreview.com/feed/'),
-    ('The Verge AI',         'https://www.theverge.com/ai-artificial-intelligence/rss/index.xml'),
-    ('Wired AI',             'https://www.wired.com/feed/category/artificial-intelligence/latest/rss'),
-    ('Ars Technica',         'https://feeds.arstechnica.com/arstechnica/technology-lab'),
-    ('Google DeepMind',      'https://deepmind.google/blog/rss.xml'),
-    ('OpenAI Blog',          'https://openai.com/blog/rss/'),
+    # 미디어/저널리즘 (공식 출처 — 신뢰도 높음)
+    ('MIT Technology Review', 'https://www.technologyreview.com/feed/',                                    False),
+    ('Wired AI',              'https://www.wired.com/feed/category/artificial-intelligence/latest/rss',    False),
+    ('Ars Technica',          'https://feeds.arstechnica.com/arstechnica/technology-lab',                  False),
+    ('The Verge AI',          'https://www.theverge.com/ai-artificial-intelligence/rss/index.xml',         False),
+    # 연구·학술 (공식 출처 — 신뢰도 높음)
+    ('DeepMind Blog',         'https://deepmind.google/blog/rss.xml',                                      False),
+    ('Hugging Face Blog',     'https://huggingface.co/blog/feed.xml',                                      False),
+    ('The Gradient',          'https://thegradient.pub/rss/',                                              False),
+    # 산업·스타트업 (공식 출처 — 신뢰도 높음)
+    ('TechCrunch AI',         'https://techcrunch.com/category/artificial-intelligence/feed/',             False),
+    ('VentureBeat AI',        'https://venturebeat.com/category/ai/feed/',                                 False),
+    # 뉴스레터·큐레이션 (공식 출처 — 신뢰도 높음)
+    ('The Batch (deeplearning.ai)', 'https://www.deeplearning.ai/the-batch/feed/',                         False),
+    ('Import AI',             'https://importai.substack.com/feed',                                        False),
+    ('Last Week in AI',       'https://lastweekin.ai/feed',                                                False),
+    # 커뮤니티 (비공식 출처 — 신뢰도 주의 필요, 100점 이상 인기 게시물만)
+    ('Hacker News AI',        'https://hnrss.org/newest?q=AI+LLM+GPT&points=100',                         True),
 ]
 
-MAX_PER_SOURCE = 4
+MAX_PER_SOURCE = 3
+HOURS_WINDOW   = 48  # 최근 48시간 기사만 수집
+
+
+def parse_published(entry) -> datetime | None:
+    """feedparser의 published_parsed(UTC struct_time)를 UTC datetime으로 변환."""
+    t = entry.get('published_parsed') or entry.get('updated_parsed')
+    if t:
+        return datetime(*t[:6], tzinfo=timezone.utc)
+    return None
+
+
+def format_date(entry) -> str:
+    """기사 게시일을 'MM/DD' 형식으로 반환."""
+    dt = parse_published(entry)
+    if dt:
+        kst = dt + timedelta(hours=9)
+        return kst.strftime('%m/%d')
+    return ''
 
 
 def fetch_news():
     articles = []
-    for source_name, url in RSS_FEEDS:
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=HOURS_WINDOW)
+
+    for source_name, url, is_community in RSS_FEEDS:
         try:
             feed = feedparser.parse(url)
-            for entry in feed.entries[:MAX_PER_SOURCE]:
+            count = 0
+            for entry in feed.entries:
+                if count >= MAX_PER_SOURCE:
+                    break
                 link = entry.get('link', '')
                 if not link.startswith('http'):
-                    continue  # 잘못된 링크 제외
+                    continue
+                pub_dt = parse_published(entry)
+                if pub_dt and pub_dt < cutoff:
+                    continue  # 오래된 기사 제외
                 articles.append({
-                    'source':    source_name,
-                    'title':     entry.get('title', '').strip(),
-                    'link':      link,
-                    'summary':   entry.get('summary', '')[:800],
-                    'published': entry.get('published', ''),
+                    'source':       source_name,
+                    'title':        entry.get('title', '').strip(),
+                    'link':         link,
+                    'summary':      entry.get('summary', '')[:800],
+                    'published':    format_date(entry),
+                    'is_community': is_community,
                 })
-            print(f"  [{source_name}] {min(MAX_PER_SOURCE, len(feed.entries))}개 수집")
+                count += 1
+            print(f"  [{source_name}] {count}개 수집")
         except Exception as e:
             print(f"  [{source_name}] 오류: {e}")
     return articles
 
 
-def summarize_with_gemini(articles):
-    client = genai.Client(api_key=GEMINI_API_KEY)
+def summarize_with_groq(articles):
+    client = Groq(api_key=GROQ_API_KEY)
 
     today = datetime.now().strftime("%Y년 %m월 %d일")
-    content = "\n\n".join([
-        f"[{i+1}] 제목: {a['title']}\n출처: {a['source']}\n링크: {a['link']}\n내용: {a['summary']}"
-        for i, a in enumerate(articles)
-    ])
+
+    def format_article(i, a):
+        community_note = " [커뮤니티]" if a.get('is_community') else ""
+        return (
+            f"[{i+1}] 제목: {a['title']} ({a['published']})\n"
+            f"출처: {a['source']}{community_note}\n"
+            f"링크: {a['link']}\n"
+            f"내용: {a['summary']}"
+        )
+
+    content = "\n\n".join([format_article(i, a) for i, a in enumerate(articles)])
 
     prompt = f"""당신은 AI 전문 뉴스 큐레이터입니다.
-아래는 {today} 수집된 AI 관련 뉴스입니다. 다음 지침에 따라 한국어로 정리해주세요.
+아래는 {today} 수집된 AI 관련 뉴스입니다. 다음 지침에 따라 정리해주세요.
+
+⚠️ 중요: 모든 출력은 반드시 한국어로만 작성하세요. 영어, 일본어 등 다른 언어는 절대 사용하지 마세요. 뉴스 제목도 한국어로 번역하세요.
 
 지침:
 1. 뉴스를 카테고리별로 분류 (예: 대형 언어 모델, AI 기업 동향, 연구·기술, 정책·규제, 기타)
-2. 각 뉴스를 2~3문장으로 핵심만 요약
-3. 각 항목에 반드시 출처명과 원문 링크를 그대로 포함 (링크를 절대 수정하지 말 것)
+2. 각 뉴스를 2~3문장으로 핵심만 한국어로 요약
+3. 각 항목에 반드시 출처명, 원문 링크, 게시일(MM/DD)을 그대로 포함 (링크를 절대 수정하지 말 것)
 4. 중복되거나 덜 중요한 뉴스는 제외
-5. HTML 형식으로 출력 (이메일 본문용)
+5. 기사가 없는 카테고리는 출력하지 말 것 — 절대 내용을 지어내지 말 것
+6. 출처에 [커뮤니티] 표시가 있는 항목은 링크 앞에 ⚠️를 붙이고, 출처명 뒤에 "(커뮤니티 출처, 정확도 확인 권장)"을 추가할 것
+7. HTML 형식으로 출력 (이메일 본문용)
 
 뉴스 목록:
 {content}
 
 출력 형식 (HTML):
-<h3>📌 카테고리명</h3>
+<h3>카테고리명</h3>
 <ul>
   <li>
-    <b>뉴스 제목</b><br>
+    <b>뉴스 제목</b> <span class="date">MM/DD</span><br>
     요약 내용 (2~3문장)<br>
-    🔗 출처: <a href="원문링크그대로">출처명</a>
+    🔗 <a href="원문링크그대로">출처명</a>
+    <!-- 커뮤니티 출처인 경우: ⚠️ <a href="원문링크그대로">출처명</a> (커뮤니티 출처, 정확도 확인 권장) -->
   </li>
 </ul>
 """
-    response = client.models.generate_content(
-        model='gemini-flash-latest',
-        contents=prompt,
+    response = client.chat.completions.create(
+        model='llama-3.3-70b-versatile',
+        messages=[{'role': 'user', 'content': prompt}],
     )
-    return response.text
+    return response.choices[0].message.content
 
 
-def send_email(html_summary):
+def get_ai_tip():
+    client = Groq(api_key=GROQ_API_KEY)
+    prompt = """AI 업계에서 자주 등장하는 용어나 개념 하나를 골라 설명해주세요.
+대상은 비전공자지만 AI에 관심 있는 직장인입니다. 매번 다른 주제로 선택하세요.
+주제 예시: LLM, RAG, MCP, 파인튜닝, 임베딩, 토크나이저, 추론(inference), 컨텍스트 윈도우,
+프롬프트 엔지니어링, 에이전트, 벡터DB, 멀티모달, RLHF, 할루시네이션, CLI, API 등.
+
+⚠️ 중요: 모든 출력은 반드시 한국어로만 작성하세요. 영어나 다른 언어는 절대 사용하지 마세요.
+
+다음 구조로 한국어 HTML을 작성하세요:
+- 용어 이름과 한 줄 정의
+- 비유나 실생활 예시로 쉽게 설명 (2~3문장)
+- 왜 중요한지 또는 어디에 쓰이는지 (1~2문장)
+
+HTML 형식 (아래를 그대로 따를 것):
+<b>💡 오늘의 AI 용어: [용어명]</b><br>
+내용
+"""
+    response = client.chat.completions.create(
+        model='llama-3.3-70b-versatile',
+        messages=[{'role': 'user', 'content': prompt}],
+    )
+    return response.choices[0].message.content
+
+
+def send_email(html_summary, ai_tip):
     today = datetime.now().strftime("%Y년 %m월 %d일")
+    weekday = ['월', '화', '수', '목', '금', '토', '일'][datetime.now().weekday()]
 
-    html_body = f"""<html>
-<head><style>
-  body  {{ font-family: 'Malgun Gothic', Arial, sans-serif; max-width: 720px; margin: 0 auto; color: #333; padding: 16px; }}
-  h2   {{ color: #1a73e8; border-bottom: 2px solid #1a73e8; padding-bottom: 8px; }}
-  h3   {{ color: #2c5f8a; margin-top: 28px; }}
-  li   {{ margin-bottom: 18px; line-height: 1.7; }}
-  a    {{ color: #1a73e8; text-decoration: none; }}
-  a:hover {{ text-decoration: underline; }}
-  .footer {{ color: #aaa; font-size: 12px; margin-top: 36px; border-top: 1px solid #eee; padding-top: 12px; }}
-</style></head>
+    html_body = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{
+    font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', Arial, sans-serif;
+    background: #f0f2f5;
+    color: #2d2d2d;
+    padding: 24px 12px;
+  }}
+  .wrapper {{
+    max-width: 680px;
+    margin: 0 auto;
+  }}
+  .body {{
+    background: #ffffff;
+    padding: 32px;
+    border-left: 1px solid #dde2ea;
+    border-right: 1px solid #dde2ea;
+  }}
+  h3 {{
+    font-size: 12px;
+    font-weight: 700;
+    color: #1558d6;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    margin: 32px 0 14px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #dde9ff;
+  }}
+  h3:first-child {{ margin-top: 0; }}
+  ul {{
+    list-style: none;
+    padding: 0;
+  }}
+  li {{
+    background: #f8f9fc;
+    border: 1px solid #e4e8f0;
+    border-left: 3px solid #1558d6;
+    border-radius: 0 8px 8px 0;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    line-height: 1.75;
+  }}
+  li b {{
+    font-size: 14px;
+    color: #111827;
+    display: inline;
+  }}
+  .date {{
+    display: inline-block;
+    font-size: 10px;
+    color: #ffffff;
+    background: #6b7eb8;
+    border-radius: 3px;
+    padding: 1px 5px;
+    margin-left: 6px;
+    font-weight: 600;
+    vertical-align: middle;
+  }}
+  .summary {{
+    font-size: 13px;
+    color: #4b5563;
+    margin-top: 6px;
+    line-height: 1.7;
+  }}
+  li a {{
+    color: #1558d6;
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 12px;
+  }}
+  li a:hover {{ text-decoration: underline; }}
+  .tip-box {{
+    background: #fffbeb;
+    border: 1px solid #fcd34d;
+    border-radius: 8px;
+    padding: 18px 20px;
+    margin-top: 32px;
+    font-size: 13px;
+    color: #374151;
+    line-height: 1.8;
+  }}
+  .footer {{
+    background: #f0f2f5;
+    border: 1px solid #dde2ea;
+    border-top: none;
+    border-radius: 0 0 12px 12px;
+    padding: 16px 32px;
+    text-align: center;
+    font-size: 11px;
+    color: #9ca3af;
+    line-height: 1.9;
+  }}
+</style>
+</head>
 <body>
-  <h2>AI 뉴스 다이제스트 - {today}</h2>
-  {html_summary}
-  <div class="footer">
-    이 메일은 매일 오전 9시(KST)에 자동 발송됩니다.<br>
-    수신 거부를 원하시면 회신해 주세요.
+  <div class="wrapper">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#1558d6;border-radius:12px 12px 0 0;">
+      <tr>
+        <td style="padding:28px 32px;font-family:'Malgun Gothic',Arial,sans-serif;">
+          <div style="font-size:11px;letter-spacing:2px;color:#a8c4ff;margin-bottom:8px;">AI NEWS DIGEST</div>
+          <div style="font-size:24px;font-weight:700;color:#ffffff;margin-bottom:6px;">오늘의 AI 뉴스</div>
+          <div style="font-size:13px;color:#c5d8ff;">{today} ({weekday}요일)</div>
+        </td>
+      </tr>
+    </table>
+    <div class="body">
+      {html_summary}
+      <div class="tip-box">
+        {ai_tip}
+      </div>
+    </div>
+    <div class="footer">
+      매일 오전 9시(KST) 자동 발송<br>
+      수신 거부를 원하시면 회신해 주세요
+    </div>
   </div>
 </body>
 </html>"""
 
     outlook = win32com.client.Dispatch('Outlook.Application')
-    mail = outlook.CreateItem(0)  # 0 = olMailItem
-    mail.To      = RECIPIENT_EMAIL
-    mail.Subject = f'[AI 뉴스 다이제스트] {today}'
+    mail = outlook.CreateItem(0)
+    mail.To       = RECIPIENT_TO
+    mail.Subject  = f'[AI 뉴스] {today} ({weekday}) 주요 소식'
     mail.HTMLBody = html_body
     mail.Send()
 
-    print(f"  이메일 발송 완료 → {RECIPIENT_EMAIL}")
+    print(f"  이메일 발송 완료 → {RECIPIENT_TO}")
 
 
 def main():
@@ -127,11 +312,18 @@ def main():
     articles = fetch_news()
     print(f"  총 {len(articles)}개 기사 수집")
 
-    print("  Gemini로 요약 중...")
-    summary = summarize_with_gemini(articles)
+    if not articles:
+        print("  수집된 기사 없음, 종료")
+        return
+
+    print("  Groq으로 요약 중...")
+    summary = summarize_with_groq(articles)
+
+    print("  AI 지식 생성 중...")
+    tip = get_ai_tip()
 
     print("  이메일 발송 중...")
-    send_email(summary)
+    send_email(summary, tip)
 
     print("  완료")
 

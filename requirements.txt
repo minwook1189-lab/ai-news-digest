@@ -1,4 +1,4 @@
 feedparser
-google-genai
+groq
 python-dotenv
 pywin32

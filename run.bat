@@ -1,3 +1,5 @@
 @echo off
-cd /d "C:\Users\140773\Desktop\Cursor\ai_news_digest"
-python main.py >> logs\digest.log 2>&1
+chcp 65001 > nul
+set PYTHONUTF8=1
+cd /d "%~dp0"
+"%~dp0.venv\Scripts\python.exe" main.py >> logs\digest.log 2>&1
