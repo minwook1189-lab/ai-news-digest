@@ -157,7 +157,7 @@ def summarize_with_groq(articles):
 </ul>
 """
     response = client.chat.completions.create(
-        model='llama-3.3-70b-versatile',
+        model='gemma2-9b-it',
         messages=[
             {'role': 'system', 'content': '당신은 한국어 전문 AI 뉴스 큐레이터입니다. 반드시 한국어로만 답변하세요. 일본어, 중국어, 영어 등 한국어 이외의 언어는 절대 사용하지 마세요.'},
             {'role': 'user', 'content': prompt},
@@ -185,7 +185,7 @@ HTML 형식 (아래를 그대로 따를 것):
 내용
 """
     response = client.chat.completions.create(
-        model='llama-3.3-70b-versatile',
+        model='gemma2-9b-it',
         messages=[
             {'role': 'system', 'content': '당신은 한국어 AI 교육 전문가입니다. 반드시 한국어로만 답변하세요. 일본어, 중국어, 영어 등 한국어 이외의 언어는 절대 사용하지 마세요.'},
             {'role': 'user', 'content': prompt},
