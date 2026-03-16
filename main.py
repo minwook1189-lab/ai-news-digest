@@ -10,10 +10,19 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def remove_non_korean_cjk(text):
-    """중국어·일본어 문자만 제거 (한국어·영어·URL은 유지)"""
-    # 한자(CJK): U+3400-U+9FFF, 히라가나/카타카나(전각): U+3040-U+30FF,
-    # 반각 카타카나: U+FF65-U+FF9F, CJK 호환 한자: U+F900-U+FAFF
-    return re.sub(r'[\u3040-\u30FF\u3400-\u9FFF\uF900-\uFAFF\uFF65-\uFF9F]', '', text)
+    """한국어·ASCII·이모지만 유지, 나머지 외국 문자 제거 (화이트리스트 방식)"""
+    return re.sub(
+        r'[^\u0000-\u024F'       # ASCII + 라틴 확장 (영어·특수문자·URL)
+        r'\uAC00-\uD7AF'         # 한글 음절
+        r'\u1100-\u11FF'         # 한글 자모
+        r'\u3130-\u318F'         # 한글 호환 자모
+        r'\u2000-\u206F'         # 일반 구두점
+        r'\u2100-\u218F'         # 문자형 기호
+        r'\u2600-\u27BF'         # 기타 기호 (⚠️ 등)
+        r'\U0001F000-\U0001FFFF' # 이모지 (🔗💡 등)
+        r']',
+        '', text
+    )
 
 GROQ_API_KEY    = os.getenv('GROQ_API_KEY')
 SMTP_EMAIL      = os.getenv('SMTP_EMAIL')
