@@ -4,9 +4,15 @@ from groq import Groq
 from datetime import datetime, timezone, timedelta
 import calendar
 import os
+import re
 from dotenv import load_dotenv
 
 load_dotenv()
+
+def remove_non_korean_cjk(text):
+    """중국어·일본어 문자만 제거 (한국어·영어·URL은 유지)"""
+    # 한자(CJK): U+3400-U+9FFF, 히라가나/카타카나: U+3040-U+30FF
+    return re.sub(r'[\u3040-\u30FF\u3400-\u9FFF]', '', text)
 
 GROQ_API_KEY    = os.getenv('GROQ_API_KEY')
 SMTP_EMAIL      = os.getenv('SMTP_EMAIL')
@@ -143,7 +149,7 @@ def summarize_with_groq(articles):
             {'role': 'user', 'content': prompt},
         ],
     )
-    return response.choices[0].message.content
+    return remove_non_korean_cjk(response.choices[0].message.content)
 
 
 def get_ai_tip():
@@ -171,7 +177,7 @@ HTML 형식 (아래를 그대로 따를 것):
             {'role': 'user', 'content': prompt},
         ],
     )
-    return response.choices[0].message.content
+    return remove_non_korean_cjk(response.choices[0].message.content)
 
 
 def send_email(html_summary, ai_tip):
