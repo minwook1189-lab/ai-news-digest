@@ -11,8 +11,9 @@ load_dotenv()
 
 def remove_non_korean_cjk(text):
     """중국어·일본어 문자만 제거 (한국어·영어·URL은 유지)"""
-    # 한자(CJK): U+3400-U+9FFF, 히라가나/카타카나: U+3040-U+30FF
-    return re.sub(r'[\u3040-\u30FF\u3400-\u9FFF]', '', text)
+    # 한자(CJK): U+3400-U+9FFF, 히라가나/카타카나(전각): U+3040-U+30FF,
+    # 반각 카타카나: U+FF65-U+FF9F, CJK 호환 한자: U+F900-U+FAFF
+    return re.sub(r'[\u3040-\u30FF\u3400-\u9FFF\uF900-\uFAFF\uFF65-\uFF9F]', '', text)
 
 GROQ_API_KEY    = os.getenv('GROQ_API_KEY')
 SMTP_EMAIL      = os.getenv('SMTP_EMAIL')
@@ -121,7 +122,7 @@ def summarize_with_groq(articles):
 
 지침:
 1. 뉴스를 카테고리별로 분류 (예: 대형 언어 모델, AI 기업 동향, 연구·기술, 정책·규제, 기타)
-2. 각 뉴스를 2~3문장으로 핵심만 한국어로 요약
+2. 각 뉴스를 2~3문장으로 요약 — 한국어 원어민이 쓴 것처럼 자연스럽게 작성. 직역 투나 나열식 표현 금지. 핵심 사실을 간결하게 전달할 것
 3. 각 항목에 반드시 출처명, 원문 링크, 게시일(MM/DD)을 그대로 포함 (링크를 절대 수정하지 말 것)
 4. 중복되거나 덜 중요한 뉴스는 제외
 5. 기사가 없는 카테고리는 출력하지 말 것 — 절대 내용을 지어내지 말 것
