@@ -119,5 +119,5 @@ ai_news_digest/
 ├── .env              # 환경 변수 (GitHub 업로드 금지)
 ├── .env.example      # 환경 변수 예시
 ├── .venv/            # 가상환경 (GitHub 업로드 금지)
-└── logs/             # 실행 로그
+└── .gitignore        # Git 제외 파일 목록
 ```
