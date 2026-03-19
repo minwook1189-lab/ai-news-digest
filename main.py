@@ -169,8 +169,9 @@ def summarize_with_groq(articles):
 
 def get_ai_tip():
     client = Groq(api_key=GROQ_API_KEY)
-    prompt = """AI 업계에서 자주 등장하는 용어나 개념 하나를 골라 설명해주세요.
-대상은 비전공자지만 AI에 관심 있는 직장인입니다. 매번 다른 주제로 선택하세요.
+    today = datetime.now().strftime("%Y-%m-%d")
+    prompt = f"""오늘 날짜는 {today}입니다. 이 날짜를 시드로 삼아 AI 업계에서 자주 등장하는 용어나 개념 하나를 골라 설명해주세요.
+대상은 비전공자지만 AI에 관심 있는 직장인입니다. 날짜가 바뀌면 반드시 다른 주제를 선택하세요.
 주제 예시: LLM, RAG, MCP, 파인튜닝, 임베딩, 토크나이저, 추론(inference), 컨텍스트 윈도우,
 프롬프트 엔지니어링, 에이전트, 벡터DB, 멀티모달, RLHF, 할루시네이션, CLI, API 등.
 
@@ -192,6 +193,7 @@ HTML 형식 (아래를 그대로 따를 것):
             {'role': 'user', 'content': prompt},
         ],
         max_tokens=1024,
+        temperature=1.2,
     )
     return remove_non_korean_cjk(response.choices[0].message.content)
 
