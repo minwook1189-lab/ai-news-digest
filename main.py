@@ -5,6 +5,7 @@ from datetime import datetime, timezone, timedelta
 import calendar
 import os
 import re
+import json
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -167,14 +168,35 @@ def summarize_with_groq(articles):
     return remove_non_korean_cjk(response.choices[0].message.content)
 
 
+USED_TERMS_FILE = os.path.join(os.path.dirname(__file__), 'used_terms.json')
+
+def _load_used_terms():
+    if os.path.exists(USED_TERMS_FILE):
+        with open(USED_TERMS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return []
+
+def _save_used_term(term: str):
+    terms = _load_used_terms()
+    if term and term not in terms:
+        terms.append(term)
+        os.makedirs(os.path.dirname(USED_TERMS_FILE), exist_ok=True)
+        with open(USED_TERMS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(terms, f, ensure_ascii=False, indent=2)
+
 def get_ai_tip():
     client = Groq(api_key=GROQ_API_KEY)
     today = datetime.now().strftime("%Y-%m-%d")
-    prompt = f"""오늘 날짜는 {today}입니다. 이 날짜를 시드로 삼아 AI 업계에서 자주 등장하는 용어나 개념 하나를 골라 설명해주세요.
-대상은 비전공자지만 AI에 관심 있는 직장인입니다. 날짜가 바뀌면 반드시 다른 주제를 선택하세요.
+    used_terms = _load_used_terms()
+    exclude_clause = (
+        f"\n⛔ 아래 용어들은 이미 사용했으니 절대 선택하지 마세요: {', '.join(used_terms)}\n"
+        if used_terms else ""
+    )
+    prompt = f"""오늘 날짜는 {today}입니다. AI 업계에서 자주 등장하는 용어나 개념 하나를 골라 설명해주세요.
+대상은 비전공자지만 AI에 관심 있는 직장인입니다.
 주제 예시: LLM, RAG, MCP, 파인튜닝, 임베딩, 토크나이저, 추론(inference), 컨텍스트 윈도우,
 프롬프트 엔지니어링, 에이전트, 벡터DB, 멀티모달, RLHF, 할루시네이션, CLI, API 등.
-
+{exclude_clause}
 ⚠️ 중요: 모든 출력은 반드시 한국어로만 작성하세요. 영어나 다른 언어는 절대 사용하지 마세요.
 
 다음 구조로 한국어 HTML을 작성하세요:
@@ -195,7 +217,12 @@ HTML 형식 (아래를 그대로 따를 것):
         max_tokens=1024,
         temperature=1.2,
     )
-    return remove_non_korean_cjk(response.choices[0].message.content)
+    result = remove_non_korean_cjk(response.choices[0].message.content)
+    # 용어명 추출 후 기록
+    match = re.search(r'오늘의 AI 용어:\s*([^\<\n]+)', result)
+    if match:
+        _save_used_term(match.group(1).strip())
+    return result
 
 
 def send_email(html_summary, ai_tip):
