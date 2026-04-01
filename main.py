@@ -345,7 +345,7 @@ def send_email(html_summary, ai_tip):
       </div>
     </div>
     <div class="footer">
-      매일 오전 9시(KST) 자동 발송<br>
+      평일(월~금) 오전 9시(KST) 자동 발송<br>
       수신 거부를 원하시면 회신해 주세요
     </div>
   </div>
