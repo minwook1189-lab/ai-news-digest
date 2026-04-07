@@ -130,7 +130,7 @@ def summarize_with_groq(articles):
 
 ⚠️ 언어 규칙 (반드시 준수):
 - 모든 출력은 한국어로만 작성. 영어 단어·외국어 단어를 문장 중간에 절대 섞지 말 것
-- 회사명·제품명·고유명사(예: OpenAI, ChatGPT, TechCrunch)만 영어 허용
+- 회사명·제품명·인명·고유명사는 반드시 영어 원문 그대로 표기 (예: Anthropic, OpenAI, ChatGPT, TechCrunch, Sam Altman — 절대 한국어로 음역하거나 번역하지 말 것)
 - 일반 단어는 예외 없이 한국어로 번역 (lawyer→변호사, psychosis→정신증, report→보고서 등)
 - 뉴스 제목도 반드시 자연스러운 한국어로 완전히 번역
 
