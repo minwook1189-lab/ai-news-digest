@@ -60,6 +60,19 @@ RSS_FEEDS = [
 MAX_PER_SOURCE = 3
 HOURS_WINDOW   = 48  # 최근 48시간 기사만 수집
 
+# 커뮤니티 소스(HN, GeekNews)용 AI 키워드 필터
+AI_KEYWORDS = [
+    'ai', 'llm', 'gpt', 'claude', 'gemini', 'gemma', 'qwen', 'llama',
+    'openai', 'anthropic', 'deepmind', 'mistral', 'hugging face',
+    'machine learning', 'deep learning', 'neural', 'artificial intelligence',
+    'chatbot', 'agent', 'rag', 'embedding', 'fine-tun', 'inference',
+    '인공지능', '머신러닝', '딥러닝', '언어모델',
+]
+
+def is_ai_related(title: str) -> bool:
+    t = title.lower()
+    return any(kw in t for kw in AI_KEYWORDS)
+
 
 def parse_published(entry) -> datetime | None:
     """feedparser의 published_parsed(UTC struct_time)를 UTC datetime으로 변환."""
@@ -86,8 +99,10 @@ def fetch_news():
         try:
             feed = feedparser.parse(url)
             count = 0
+            # 커뮤니티 소스는 피드 전체를 훑으며 AI 관련 글만 최대 5개 수집
+            max_count = 5 if is_community else MAX_PER_SOURCE
             for entry in feed.entries:
-                if count >= MAX_PER_SOURCE:
+                if count >= max_count:
                     break
                 link = entry.get('link', '')
                 if not link.startswith('http'):
@@ -95,9 +110,13 @@ def fetch_news():
                 pub_dt = parse_published(entry)
                 if pub_dt and pub_dt < cutoff:
                     continue  # 오래된 기사 제외
+                title = entry.get('title', '').strip()
+                # 커뮤니티 소스는 AI 관련 키워드 포함 글만 수집
+                if is_community and not is_ai_related(title):
+                    continue
                 articles.append({
                     'source':       source_name,
-                    'title':        entry.get('title', '').strip(),
+                    'title':        title,
                     'link':         link,
                     'summary':      entry.get('summary', '')[:800],
                     'published':    format_date(entry),
