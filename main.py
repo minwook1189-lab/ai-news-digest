@@ -53,7 +53,6 @@ RSS_FEEDS = [
     ('Import AI',             'https://importai.substack.com/feed',                                        False),
     ('Last Week in AI',       'https://lastweekin.ai/feed',                                                False),
     # 커뮤니티 (비공식 출처 — 신뢰도 주의 필요)
-    ('Hacker News AI',        'https://hnrss.org/newest?q=AI+LLM+GPT&points=100',                         True),
     ('Hacker News',           'https://hnrss.org/frontpage',                                               True),
     ('GeekNews',              'http://feeds.feedburner.com/geeknews-feed',                                 True),
 ]
