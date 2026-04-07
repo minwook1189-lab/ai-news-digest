@@ -52,8 +52,10 @@ RSS_FEEDS = [
     ('The Batch (deeplearning.ai)', 'https://www.deeplearning.ai/the-batch/feed/',                         False),
     ('Import AI',             'https://importai.substack.com/feed',                                        False),
     ('Last Week in AI',       'https://lastweekin.ai/feed',                                                False),
-    # 커뮤니티 (비공식 출처 — 신뢰도 주의 필요, 100점 이상 인기 게시물만)
+    # 커뮤니티 (비공식 출처 — 신뢰도 주의 필요)
     ('Hacker News AI',        'https://hnrss.org/newest?q=AI+LLM+GPT&points=100',                         True),
+    ('Hacker News',           'https://hnrss.org/frontpage',                                               True),
+    ('GeekNews',              'http://feeds.feedburner.com/geeknews-feed',                                 True),
 ]
 
 MAX_PER_SOURCE = 3
