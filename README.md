@@ -5,7 +5,7 @@
 ## 주요 기능
 
 - 주요 AI 뉴스 사이트 RSS 피드에서 최신 기사 자동 수집 (최근 48시간, 소스당 최대 3건)
-- Groq API(LLaMA 3.3 70B)를 활용한 한국어 요약 및 카테고리 분류
+- Groq API(Qwen3 32B)를 활용한 한국어 요약 및 카테고리 분류
 - 커뮤니티 출처 기사에 ⚠️ 신뢰도 경고 자동 표시
 - Outlook COM 자동화를 통한 HTML 이메일 발송 (다수 수신자 지원)
 - Windows 작업 스케줄러로 평일(월~금) 오전 9시 자동 실행
@@ -26,7 +26,8 @@
 | The Batch (deeplearning.ai) | 주간 AI 하이라이트 (Andrew Ng) | 높음 |
 | Import AI | 연구 논문 중심 큐레이션 | 높음 |
 | Last Week in AI | 주간 AI 동향 요약 | 높음 |
-| Hacker News AI | 커뮤니티 인기글 (100점 이상만) | 주의 ⚠️ |
+| Hacker News | 커뮤니티 인기글 (프론트페이지) | 주의 ⚠️ |
+| GeekNews | 한국어 기술 뉴스 큐레이션 | 주의 ⚠️ |
 
 ## 요구 사항
 
@@ -106,18 +107,20 @@ cp .env.example .env
   ```
   RECIPIENT_EMAIL=user1@example.com, user2@example.com
   ```
-- ⚠️ 표시가 붙은 Hacker News 출처는 커뮤니티 게시글로, 정확도를 별도 확인하는 것을 권장합니다.
+- ⚠️ 표시가 붙은 Hacker News, GeekNews 출처는 커뮤니티 게시글로, 정확도를 별도 확인하는 것을 권장합니다.
 
 ## 파일 구조
 
 ```
 ai_news_digest/
 ├── main.py           # 메인 스크립트
+├── used_terms.json   # 오늘의 AI 용어 사용 이력 (중복 방지)
 ├── run.bat           # 작업 스케줄러용 실행 파일
 ├── setup_task.bat    # 작업 스케줄러 자동 등록 스크립트
 ├── requirements.txt  # 패키지 목록
 ├── .env              # 환경 변수 (GitHub 업로드 금지)
 ├── .env.example      # 환경 변수 예시
 ├── .venv/            # 가상환경 (GitHub 업로드 금지)
+├── logs/             # 실행 로그
 └── .gitignore        # Git 제외 파일 목록
 ```
