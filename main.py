@@ -10,6 +10,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+def strip_code_block(text: str) -> str:
+    """LLM이 마크다운 코드 블록(```html ... ```)으로 감싸 응답할 때 블록 태그를 제거한다."""
+    text = text.strip()
+    text = re.sub(r'^```[a-zA-Z]*\n?', '', text)
+    text = re.sub(r'\n?```$', '', text)
+    return text.strip()
+
+
 def remove_non_korean_cjk(text):
     """한국어·ASCII·이모지만 유지, 나머지 외국 문자 제거 (화이트리스트 방식)"""
     return re.sub(
@@ -100,7 +108,7 @@ def fetch_news():
             feed = feedparser.parse(url)
             count = 0
             # 커뮤니티 소스는 피드 전체를 훑으며 AI 관련 글만 최대 5개 수집
-            max_count = 5 if is_community else MAX_PER_SOURCE
+            max_count = 3 if is_community else MAX_PER_SOURCE
             for entry in feed.entries:
                 if count >= max_count:
                     break
@@ -118,7 +126,7 @@ def fetch_news():
                     'source':       source_name,
                     'title':        title,
                     'link':         link,
-                    'summary':      entry.get('summary', '')[:800],
+                    'summary':      entry.get('summary', '')[:400],
                     'published':    format_date(entry),
                     'is_community': is_community,
                 })
@@ -150,30 +158,39 @@ def summarize_with_groq(articles):
 
 ⚠️ 언어 규칙 (반드시 준수):
 - 모든 출력은 한국어로만 작성. 영어 단어·외국어 단어를 문장 중간에 절대 섞지 말 것
-- 회사명·제품명·인명·고유명사는 반드시 영어 원문 그대로 표기 (예: Anthropic, OpenAI, ChatGPT, TechCrunch, Sam Altman — 절대 한국어로 음역하거나 번역하지 말 것)
-- 일반 단어는 예외 없이 한국어로 번역 (lawyer→변호사, psychosis→정신증, report→보고서 등)
+- 회사명·제품명·서비스명·인명은 반드시 영어 원문 그대로 표기할 것
+  금지 예시: Vercel→"버클", Google→"구글", Microsoft→"마이크로소프트" (이런 식의 번역·음역 절대 금지)
+  허용 예시: Vercel, OpenAI, Anthropic, ChatGPT, Gemini, TechCrunch, Sam Altman, Guillermo Rauch — 영어 그대로
+- 일반 단어는 예외 없이 한국어로 번역 (report→보고서, model→모델, agent→에이전트 등)
 - 뉴스 제목도 반드시 자연스러운 한국어로 완전히 번역
+
+⚠️ 출처 규칙 (반드시 준수):
+- 출처명은 입력 데이터의 '출처:' 필드 값을 반드시 그대로 사용할 것
+  예: 출처가 "Hacker News"이면 링크의 도메인(economist.com 등)과 무관하게 "Hacker News"로 표기
+- 링크(href)도 입력 데이터의 '링크:' 필드 값을 그대로 사용할 것 — 절대 수정하지 말 것
 
 지침:
 1. 뉴스를 카테고리별로 분류 (예: 대형 언어 모델, AI 기업 동향, 연구·기술, 정책·규제, 기타)
 2. 각 뉴스를 2~3문장으로 요약 — 한국어 원어민이 쓴 것처럼 자연스럽게 작성. 직역 투·나열식 표현 금지. 문장은 반드시 완전한 형태로 끝낼 것 (절단 금지)
-3. 각 항목에 반드시 출처명, 원문 링크, 게시일(MM/DD)을 그대로 포함 (링크를 절대 수정하지 말 것)
-4. 중복되거나 덜 중요한 뉴스는 제외
-5. 기사가 없는 카테고리는 출력하지 말 것 — 절대 내용을 지어내지 말 것
-6. 출처에 [커뮤니티] 표시가 있는 항목은 링크 앞에 ⚠️를 붙이고, 출처명 뒤에 "(커뮤니티 출처, 정확도 확인 권장)"을 추가할 것
-7. HTML 형식으로 출력 (이메일 본문용)
+3. 각 항목에 반드시 출처명, 원문 링크, 게시일(MM/DD)을 그대로 포함
+4. AI와 직접적으로 관련이 없는 기사는 제외할 것 (이메일 기술, 개발 도구 등 AI가 주제가 아닌 경우)
+5. 중복되거나 덜 중요한 뉴스는 제외
+6. 기사가 없는 카테고리는 출력하지 말 것 — 절대 내용을 지어내지 말 것
+7. [커뮤니티] 표시가 명시된 항목만 ⚠️를 붙이고 출처명 뒤에 "(커뮤니티 출처, 정확도 확인 권장)"을 추가할 것
+   [커뮤니티] 표시가 없는 항목은 URL·도메인과 관계없이 절대 커뮤니티로 분류하지 말 것
+8. HTML 형식으로만 출력할 것 — 마크다운 코드 블록(```html)으로 감싸지 말 것
 
 뉴스 목록:
 {content}
 
-출력 형식 (HTML):
+출력 형식 (HTML, 코드 블록 없이 바로 출력):
 <h3>카테고리명</h3>
 <ul>
   <li>
     <b>뉴스 제목</b> <span class="date">MM/DD</span><br>
     요약 내용 (2~3문장)<br>
-    🔗 <a href="원문링크그대로">출처명</a>
-    <!-- 커뮤니티 출처인 경우: ⚠️ <a href="원문링크그대로">출처명</a> (커뮤니티 출처, 정확도 확인 권장) -->
+    🔗 <a href="링크: 필드 값 그대로">출처: 필드 값 그대로</a>
+    <!-- 커뮤니티 출처([커뮤니티] 표시 있는 경우만): ⚠️ <a href="링크 그대로">출처명 그대로</a> (커뮤니티 출처, 정확도 확인 권장) -->
   </li>
 </ul>
 """
@@ -183,10 +200,10 @@ def summarize_with_groq(articles):
             {'role': 'system', 'content': '당신은 한국어 전문 AI 뉴스 큐레이터입니다. 반드시 한국어로만 답변하세요. 일본어, 중국어, 영어 등 한국어 이외의 언어는 절대 사용하지 마세요.'},
             {'role': 'user', 'content': prompt},
         ],
-        max_tokens=4096,
+        max_tokens=2000,
         reasoning_effort='none',
     )
-    return remove_non_korean_cjk(response.choices[0].message.content)
+    return remove_non_korean_cjk(strip_code_block(response.choices[0].message.content))
 
 
 USED_TERMS_FILE = os.path.join(os.path.dirname(__file__), 'used_terms.json')
@@ -218,14 +235,20 @@ def get_ai_tip():
 주제 예시: LLM, RAG, MCP, 파인튜닝, 임베딩, 토크나이저, 추론(inference), 컨텍스트 윈도우,
 프롬프트 엔지니어링, 에이전트, 벡터DB, 멀티모달, RLHF, 할루시네이션, CLI, API 등.
 {exclude_clause}
+예시 작성 지침:
+- 실제 AI 서비스·개발 현장에서 관찰되는 구체적인 사례를 예시로 들 것
+- 너무 뻔하거나 AI가 절대 틀리지 않을 사실(수도, 역사적 사실 등)을 예시로 쓰지 말 것
+- 좋은 예시: "ChatGPT에게 논문 출처를 물었더니 실제로 존재하지 않는 논문 제목과 저자를 그럴듯하게 만들어냈다", "없는 Python 함수를 있다고 알려줬다" 같은 실제 발생 유형
+
 ⚠️ 중요: 모든 출력은 반드시 한국어로만 작성하세요. 영어나 다른 언어는 절대 사용하지 마세요.
+HTML 형식으로만 출력하세요 — 마크다운 코드 블록(```html)으로 감싸지 마세요.
 
 다음 구조로 한국어 HTML을 작성하세요:
 - 용어 이름과 한 줄 정의
 - 비유나 실생활 예시로 쉽게 설명 (2~3문장)
 - 왜 중요한지 또는 어디에 쓰이는지 (1~2문장)
 
-HTML 형식 (아래를 그대로 따를 것):
+HTML 형식 (아래를 그대로 따를 것, 코드 블록 없이 바로 출력):
 <b>💡 오늘의 AI 용어: [용어명]</b><br>
 내용
 """
@@ -239,7 +262,7 @@ HTML 형식 (아래를 그대로 따를 것):
         temperature=1.2,
         reasoning_effort='none',
     )
-    result = remove_non_korean_cjk(response.choices[0].message.content)
+    result = remove_non_korean_cjk(strip_code_block(response.choices[0].message.content))
     # 용어명 추출 후 기록
     match = re.search(r'오늘의 AI 용어:\s*([^\<\n]+)', result)
     if match:
