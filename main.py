@@ -407,8 +407,22 @@ def send_email(html_summary, ai_tip):
     print(f"  이메일 발송 완료 → {RECIPIENT_TO}")
 
 
+def is_outlook_running() -> bool:
+    import subprocess
+    result = subprocess.run(
+        ['tasklist', '/FI', 'IMAGENAME eq OUTLOOK.EXE'],
+        capture_output=True, text=True
+    )
+    return 'OUTLOOK.EXE' in result.stdout
+
+
 def main():
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    if not is_outlook_running():
+        print(f"[{now}] Outlook이 실행 중이지 않아 건너뜁니다.")
+        return
+
     print(f"[{now}] AI 뉴스 수집 시작")
 
     articles = fetch_news()
