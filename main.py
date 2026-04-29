@@ -138,7 +138,7 @@ def fetch_news():
 
 
 def summarize_with_groq(articles):
-    client = Groq(api_key=GROQ_API_KEY)
+    client = Groq(api_key=GROQ_API_KEY, http_client=__import__('httpx').Client(verify=False))
 
     today = datetime.now().strftime("%Y년 %m월 %d일")
 
@@ -223,7 +223,7 @@ def _save_used_term(term: str):
             json.dump(terms, f, ensure_ascii=False, indent=2)
 
 def get_ai_tip():
-    client = Groq(api_key=GROQ_API_KEY)
+    client = Groq(api_key=GROQ_API_KEY, http_client=__import__('httpx').Client(verify=False))
     today = datetime.now().strftime("%Y-%m-%d")
     used_terms = _load_used_terms()
     exclude_clause = (
